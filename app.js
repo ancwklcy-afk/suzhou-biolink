@@ -1,95 +1,143 @@
-const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const seed={cards:[{id:'C001',type:'能力',title:'抗体药物临床前评价',field:'创新药',owner:'共创成员 A',desc:'提供药效评价、实验设计与临床前证据梳理，支持早期项目验证。',tags:'抗体,药效,临床前',date:'2027-02-01',auth:true,willing:true,verified:true},{id:'R002',type:'资源',title:'美国生物医药 BD 网络',field:'创新药',owner:'共创成员 B',desc:'协调北美许可合作窗口；具体机构与联系人需双向授权后披露。',tags:'BD,美国,许可,跨境',date:'2027-02-01',auth:true,willing:true,verified:true},{id:'C003',type:'能力',title:'医疗器械注册路径评估',field:'医疗器械',owner:'共创成员 C',desc:'协助梳理二、三类器械注册路径、验证材料与阶段计划。',tags:'注册,器械,验证',date:'2027-01-25',auth:true,willing:true,verified:true},{id:'R004',type:'资源',title:'苏州中试与转化平台',field:'生物技术',owner:'共创成员 D',desc:'开放中试设施及转化协作窗口，先确认工艺与产能适配。',tags:'中试,工艺,转化',date:'2027-01-20',auth:true,willing:true,verified:true},{id:'C005',type:'能力',title:'生命科学知识库与 AI 工作流',field:'AI赋能',owner:'共创成员 E',desc:'面向企业摘要与非敏感资料设计检索、结构化与自动化流程。',tags:'AI,知识库,数据',date:'2027-01-26',auth:true,willing:true,verified:true},{id:'R006',type:'资源',title:'早期产业资本合作窗口',field:'产业资本',owner:'共创成员 F',desc:'生命科学早期项目融资沟通渠道，当前意愿仍待成员复核。',tags:'融资,资本,转化',date:'2026-10-01',auth:true,willing:false,verified:false}],needs:[{id:'N001',title:'抗体项目北美许可合作伙伴寻找',field:'创新药',tags:'抗体,BD,美国,许可,跨境',desc:'寻找具有抗体开发经验的北美许可合作方，先进行匿名适配评估。',accept:'交付 3 个有依据的候选方向及材料缺口清单',budget:'待议',date:'2026-12-10',auth:true},{id:'N002',title:'器械注册前验证方案诊断',field:'医疗器械',tags:'器械,注册,验证',desc:'希望明确注册材料缺口及验证方案。',accept:'形成阶段验证建议',budget:'待议',date:'2026-12-05',auth:true}],projects:[{id:'P001',title:'抗体项目 · 跨境 BD',field:'创新药',stage:1,next:'完成匿名候选核对',owner:'项目经理（示例）'},{id:'P002',title:'诊断设备 · 验证路径',field:'医疗器械',stage:2,next:'确认双方首谈时间',owner:'项目经理（示例）'},{id:'P003',title:'中试工艺 · 转化评估',field:'生物技术',stage:0,next:'补充工艺摘要及验收标准',owner:'项目经理（示例）'}],bookings:[],ledger:[{name:'能力卡独立验收入库',kind:'建设贡献',amount:5,status:'示例确认'},{name:'可复用访谈模板验收',kind:'建设贡献',amount:20,status:'示例确认'}],logs:[]};
-let db;try{db=JSON.parse(localStorage.getItem('biolink-v1'))||structuredClone(seed)}catch{db=structuredClone(seed)}
-db.events ??= [];
-let route='home',filter='全部',query='';const routes=[['home','◫','工作台'],['resources','▦','能力资源库'],['matching','⌘','需求与匹配'],['projects','▤','项目协作'],['ledger','◎','贡献账本'],['events','▧','私董会活动']];const stages=['受理补料','匹配中','双向确认','推进交付'];
-function save(){localStorage.setItem('biolink-v1',JSON.stringify(db))}function log(t){db.logs.unshift({t,time:new Date().toLocaleString('zh-CN')});save()}function toast(t){$('#toast').textContent=t;$('#toast').style.display='block';clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>$('#toast').style.display='none',3200)}
-function head(title,sub,action=''){return `<div class="page-head"><div><div class="eyebrow">BIOLINK / COLLABORATION</div><h1>${title}</h1><div class="sub">${sub}</div></div>${action}</div>`}function btn(t,action,primary=false){return `<button class="btn ${primary?'primary':''}" data-act="${action}">${t}</button>`}function tag(t,c=''){return `<span class="tag ${c}">${esc(t)}</span>`}function valid(c){return c.auth&&c.verified&&c.willing&&new Date(c.date+'T23:59:59')>=new Date()}function card(c){return `<article class="resource"><div class="resource-top"><span class="resource-icon">${c.type==='能力'?'✳':'◈'}</span>${tag(valid(c)?'可参与匹配':'待核验',valid(c)?'':'gold')}</div><h3>${esc(c.title)}</h3>${tag(c.field)}${tag(c.type+'卡','blue')}<p>${esc(c.desc)}</p><div class="resource-bottom"><span>${esc(c.owner)}</span><button class="text-button" data-detail="${c.id}">查看档案 ↗</button></div></article>`}
-function home(){let n=db.cards.filter(valid).length;return head('让每一份能力，找到共创的可能','连接生命科学的真实能力、资源与需求，从苏州开始。',btn('＋ 发布需求','newNeed',true))+`<section class="hero"><div><div class="eyebrow">CONNECT · COLLABORATE · CREATE</div><h2>一个行业的力量，<br>共同推动生命科学前行。</h2><p>把你的专长带进来，让合作从一个真实问题开始。</p>${btn('探索能力资源 ↗','resources')}</div><div class="hero-note">90 天共创验证计划<br><strong>01</strong> / 03 阶段<br>能力入库 → 需求匹配 → 项目交付</div></section><section class="stats">${[[n,'有效能力 / 资源卡','90 天目标 · 30 张'],[db.needs.length,'已收录需求','90 天目标 · 10 个'],[db.projects.length,'协作项目','从匹配走向交付'],[db.ledger.reduce((a,x)=>a+x.amount,0),'演示建设贡献','与业务贡献分别记录']].map(([v,l,s])=>`<article class="stat"><div class="stat-label">${l}<span>↗</span></div><strong>${v}</strong><small>${s}</small></article>`).join('')}</section><div class="grid-main"><div><section class="panel"><div class="section-title"><h2>发现共创能力</h2><button class="text-button" data-act="resources">查看全部 ↗</button></div><div class="mini-cards">${db.cards.filter(valid).slice(0,2).map(card).join('')}</div></section><section class="panel"><div class="section-title"><h2>正在发生的协作</h2>${tag('示例项目','gray')}</div><div class="table-wrap"><table><thead><tr><th>项目 / 方向</th><th>当前阶段</th><th>下一步</th></tr></thead><tbody>${db.projects.slice(0,3).map(p=>`<tr><td><strong>${esc(p.title)}</strong><br><small>${esc(p.id)}</small></td><td>${tag(stages[p.stage])}</td><td>${esc(p.next)}</td></tr>`).join('')}</tbody></table></div></section></div><div><section class="panel"><div class="section-title"><h2>下一场共创</h2>${tag('拟议日程','gold')}</div><div class="event"><div class="event-date">26<small><br>2026 / 11</small></div><div><h3>苏州 · 首场共创沙龙</h3><p class="sub">8–12 人闭门交流 · 90 分钟<br>带来一项能力与一个真实需求</p></div></div><div style="margin-top:18px">${btn(db.bookings.includes('salon')?'查看我的报名':'了解并报名 ↗','events')}</div></section><section class="panel"><div class="section-title"><h2>90 天目标进展</h2>${tag('演示')}</div>${[[n,30,'有效能力与资源'],[db.needs.length,10,'真实需求'],[0,5,'验收交付']].map(([v,t,l])=>`<div class="goal"><div><span>${l}</span><span>${v} / ${t}</span></div><div class="progress"><span style="width:${Math.min(100,v/t*100)}%"></span></div></div>`).join('')}</section><section class="panel"><h2>工作空间动态</h2>${(db.logs.length?db.logs.slice(0,3):[{t:'示例工作空间已就绪',time:'新增一张卡片，开启你的共创'}]).map(x=>`<div class="activity"><span class="activity-dot"></span><div><p>${esc(x.t)}</p><small>${esc(x.time)}</small></div></div>`).join('')}</section></div></div>`}
-function resources(){const list=db.cards.filter(c=>(filter==='全部'||c.type===filter||c.field===filter)&&(!query||[c.title,c.desc,c.tags,c.field].join(' ').toLowerCase().includes(query.toLowerCase())));return head('能力资源库','从可验证的专长和有授权的资源出发，寻找合适的同行。',btn('＋ 新增卡片','newCard',true))+`<div class="toolbar"><input id="search" aria-label="搜索能力资源" placeholder="搜索能力、关键词或产业方向" value="${esc(query)}"><select id="field" aria-label="产业方向">${['全部','创新药','医疗器械','生物技术','AI赋能','产业资本'].map(f=>`<option ${filter===f?'selected':''}>${f}</option>`).join('')}</select></div><div class="tabs">${['全部','能力','资源'].map(t=>`<button class="tab ${filter===t?'selected':''}" data-filter="${t}">${t==='全部'?'全部卡片':t+'卡'}</button>`).join('')}</div><div class="cards">${list.map(card).join('')||'<div class="empty">没有找到相关卡片，请调整关键词。</div>'}</div>`}
-function matching(){return head('需求与匹配','先校验边界，再寻找候选；先交换摘要，再确认双方意愿。',btn('＋ 发布需求','newNeed',true))+`<div class="notice">当前使用可复算的演示规则，未连接大模型。仅匹配已授权、未过期、已核验且有合作意愿的卡片。</div><section class="panel"><h2>选择一个真实问题</h2><div class="toolbar" style="margin-top:18px"><select id="need-select" style="flex:1">${db.needs.map(n=>`<option value="${n.id}">${esc(n.title)}</option>`).join('')}</select>${btn('生成匹配建议 ↗','runMatch',true)}</div><div id="need-summary"></div></section><div id="match-results"><div class="empty">选择需求，查看候选能力与资源及评分依据</div></div>`}
-function runMatch(){let n=db.needs.find(x=>x.id===$('#need-select').value);if(!n)return toast('请先发布需求');$('#need-summary').innerHTML=`${tag(n.field)}<p class="sub">${esc(n.desc)}</p><p class="sub">验收标准：${esc(n.accept)}</p>`;if(!n.auth){$('#match-results').innerHTML='<div class="empty">该需求尚未授权匹配</div>';return}let tokens=n.tags.split(/[,，、\s]+/).filter(Boolean);let ranked=db.cards.filter(valid).filter(c=>c.field===n.field||tokens.some(t=>c.tags.includes(t))).map(c=>{let overlap=tokens.filter(t=>c.tags.includes(t)).length;let fit=Math.min(60,(c.field===n.field?30:0)+Math.min(30,overlap*10));let evidence=c.verified?25:0;return{c,fit,evidence,intent:15,score:fit+evidence+15}}).sort((a,b)=>b.score-a.score||b.fit-a.fit||b.c.date.localeCompare(a.c.date)||a.c.id.localeCompare(b.c.id));$('#match-results').innerHTML=`<div class="section-title"><h2>候选建议 <span class="sub">/ ${ranked.length} 个符合条件</span></h2>${tag('规则 V1.0')}</div>${ranked.map(({c,fit,evidence,intent,score})=>`<article class="match-row"><div class="score">${score}<small>规则适配分 / 100</small></div><div class="match-info"><h3>${esc(c.title)}</h3>${tag(c.field)}${tag('匿名摘要','blue')}<p>${esc(c.desc)}</p><small>适配 ${fit}/60 · 证据 ${evidence}/25 · 意愿 ${intent}/15</small></div><button class="btn" data-intro="${c.id}" data-need="${n.id}">申请双向引荐</button></article>`).join('')||'<div class="empty">尚无合格候选。建议补充资源或调整需求关键词。</div>'}<p class="sub">已过滤 ${db.cards.length-db.cards.filter(valid).length} 张未满足基础条件的卡片。演示分数仅供人工复核。</p>`}
-function projects(){return head('项目协作','每一个项目，都有明确的负责人、下一步与交付记录。',btn('＋ 创建项目','newProject',true))+`<div class="notice">当前为本地流程演示。申请引荐后由运营审核；双向授权、材料核验与交付验收需在正式系统记录。</div><div class="board">${stages.map((s,i)=>`<section class="column"><h3>${s} <span style="float:right">${db.projects.filter(p=>p.stage===i).length}</span></h3>${db.projects.filter(p=>p.stage===i).map(p=>`<article class="project">${tag(p.field)}<h3>${esc(p.title)}</h3><p>${esc(p.id)} · ${esc(p.owner)}</p><p>下一步：${esc(p.next)}</p>${btn('查看并更新进展 ↗','project:'+p.id)}</article>`).join('')}</section>`).join('')}</div>`}
-function ledger(){return head('贡献账本','有证据的交付，形成可追溯的贡献。')+`<div class="notice">以下为启动计划 V1.0 拟议规则试算。贡献值、服务积分、拟授予权益与已正式授予权益分别记账；试算不产生真实授予或现金权益。</div><div class="grid-main"><section class="panel"><h2>项目贡献试算</h2><form id="calc"><div class="form-grid"><label>本笔净实收（美元等值）<input required id="amount" type="number" min="0.01" max="1000000000000" step="0.01" value="1000000"></label><label>款项类别<select id="payment"><option value="1.2">合同首付款 · 权重 1.20</option><option value="1">里程碑 / 销售分成 · 1.00</option></select></label><label>锁定难度 D（1–10）<input id="difficulty" type="number" min="1" max="10" step="0.1" value="8" required></label><label>组织服务归属 z（0–1）<input id="ownership" type="number" min="0" max="1" step="0.01" value="1" required></label><label>本人成员份额（0–100%）<input id="share" type="number" min="0" max="100" step="0.01" value="30" required></label></div><button class="btn primary" type="submit" style="margin-top:18px">计算本笔贡献</button></form><div id="calculation"></div><p class="sub">ΔP = 100 / 1,000,000 × [1 + 0.2 × (D−1)] × z × a × (0.1 + 0.9 × w)</p></section><div><section class="panel"><h2>我的四本账</h2>${[['项目贡献','0.00'],['建设贡献（示例）',db.ledger.reduce((s,x)=>s+x.amount,0).toFixed(2)],['已发服务积分','0'],['已正式授予权益','0%']].map(([a,b])=>`<div class="rule" style="display:flex;justify-content:space-between"><span>${a}</span><strong>${b}</strong></div>`).join('')}<p class="sub">积分须按季度额度与服务产能发放；不由试算直接生成。</p></section></div></div><section class="panel"><h2>贡献事件记录</h2><div class="table-wrap"><table><thead><tr><th>事件</th><th>通道</th><th>单位</th><th>状态</th></tr></thead><tbody>${db.ledger.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.kind)}</td><td>${x.amount.toFixed(2)}</td><td>${tag(x.status)}</td></tr>`).join('')}</tbody></table></div></section>`}
-function events(){return head('私董会活动','带着真实问题相聚，带着清晰的行动离开。',btn('＋ 创建活动','newEvent',true))+`<div class="notice">示例沙龙日程待确认。创建的活动和参会意向保存在当前浏览器。</div>${eventList()}<section class="hero"><div><div class="eyebrow">SUZHOU · FOUNDING SALON</div><h2>首场生命科学共创沙龙</h2><p>2026 年 11 月 26 日 · 苏州（场地及具体时间待确认）</p><p>8–12 位同行 · 90 分钟 · 一项能力 × 一个需求</p>${btn(db.bookings.includes('salon')?'已记录意向 · 查看 / 取消':'记录参会意向 ↗','book')}</div><div class="hero-note"><strong>11.26</strong><br>从认识彼此，到一起解决问题</div></section><div class="grid-main" style="margin-top:24px"><section class="panel"><h2>90 分钟，一起完成什么</h2>${[['10 分钟','理念与授权规则'],['25 分钟','会员能力与真实需求交流'],['25 分钟','匿名匹配演示'],['20 分钟','确认行动人与下一步'],['10 分钟','补录资料与下次节点']].map(([t,n])=>`<div class="activity"><span class="tag">${t}</span><p>${n}</p></div>`).join('')}</section><section class="panel"><h2>会前准备</h2><div class="rule"><h3>01 / 一项可提供的能力</h3><p>说明交付内容、案例与适用边界。</p></div><div class="rule"><h3>02 / 一个真实需求</h3><p>明确项目阶段、目标、时间与验收标准。</p></div><div class="rule"><h3>03 / 你的披露边界</h3><p>先讨论匿名摘要，身份与联系方式经双方确认后披露。</p></div></section></div>`}
-function render(){route=location.hash.slice(1)||'home';if(!routes.some(x=>x[0]===route))route='home';$('#nav').innerHTML=routes.map(([id,icon,name])=>`<a href="#${id}" class="${id===route?'active':''}"><b>${icon}</b>${name}</a>`).join('');$('#breadcrumb').textContent='工作空间 / '+routes.find(x=>x[0]===route)[2];$('#app').innerHTML=({home,resources,matching,projects,ledger,events})[route]();document.title=routes.find(x=>x[0]===route)[2]+' · 生命科学共创会';}
-function modal(html){$('#dialog-content').innerHTML=html;$('#dialog').showModal()}const closeBtn='<button type="button" class="btn" data-act="close">取消</button>';
-function newCard(){modal(`<h2>新增能力 / 资源卡</h2><p class="sub">使用匿名标签与非敏感摘要，先确认可交付范围。</p><form id="card-form"><div class="form-grid"><label>卡片类型<select name="type"><option>能力</option><option>资源</option></select></label><label>产业方向<select name="field">${['创新药','医疗器械','生物技术','AI赋能','产业资本'].map(x=>`<option>${x}</option>`).join('')}</select></label></div><label>名称<input name="title" maxlength="50" required></label><label>可提供的支持</label><textarea name="desc" required maxlength="500"></textarea><label>关键词（逗号分隔）<input name="tags" required maxlength="100"></label><label>有效期<input name="date" type="date" min="${new Date().toLocaleDateString('en-CA')}" required></label><div class="check"><input type="checkbox" name="auth" id="auth" required><label for="auth">我同意以上匿名摘要用于本工作空间的匹配演示</label></div><p class="sub">新卡片以“待核验”入库，复核前不会进入匹配候选。</p><div class="actions">${closeBtn}<button class="btn primary">保存待核验卡片</button></div></form>`)}
-function newNeed(){modal(`<h2>发布一个真实需求</h2><form id="need-form"><label>需求标题<input name="title" required maxlength="60"></label><label>方向<select name="field">${['创新药','医疗器械','生物技术','AI赋能','产业资本'].map(x=>`<option>${x}</option>`).join('')}</select></label><label>问题与项目阶段</label><textarea name="desc" required maxlength="500"></textarea><label>希望交付什么（验收标准）<input name="accept" required maxlength="200"></label><div class="form-grid"><label>预算范围<input name="budget" placeholder="例如：待议" required maxlength="40"></label><label>期望完成日期<input type="date" name="date" required></label></div><label>匹配关键词（逗号分隔）<input name="tags" required maxlength="100"></label><div class="check"><input type="checkbox" name="auth" id="need-auth" required><label for="need-auth">同意以上匿名需求用于本地匹配演示</label></div><div class="actions">${closeBtn}<button class="btn primary">保存需求</button></div></form>`)}
-const fields = ['创新药', '医疗器械', '生物技术', 'AI赋能', '产业资本'];
+const get = id => document.getElementById(id);
+let mode = 'login';
+let generation = 0;
 
-function project(id) {
-  const item = id ? db.projects.find(entry => entry.id === id) : null;
-  const fieldOptions = fields.map(field =>
-    `<option ${field === item?.field ? 'selected' : ''}>${field}</option>`
-  ).join('');
-  const stageOptions = stages.map((stage, index) =>
-    `<option value="${index}" ${index === (item?.stage ?? 0) ? 'selected' : ''}>${stage}</option>`
-  ).join('');
-  modal(`<h2>${item ? esc(item.title) : '创建项目'}</h2>
-    <form id="project-form" data-id="${esc(item?.id)}">
-      <label>项目名称<input name="title" value="${esc(item?.title)}" required maxlength="60"></label>
-      <div class="form-grid">
-        <label>产业方向<select name="field">${fieldOptions}</select></label>
-        <label>当前阶段<select name="stage">${stageOptions}</select></label>
-      </div>
-      <label>负责人<input name="owner" value="${esc(item?.owner)}" required maxlength="40"></label>
-      <label>下一步行动<input name="next" value="${esc(item?.next)}" required maxlength="120"></label>
-      <div class="actions">${closeBtn}<button class="btn primary">${item ? '保存进展' : '创建项目'}</button></div>
-    </form>`);
+async function api(path, payload) {
+  const options = payload === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };
+  const response = await fetch(`/api/${path}`, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(data.error || '服务暂不可用，请稍后重试。'), { status: response.status });
+  if (!Object.keys(data).length) throw new Error('服务暂不可用，请稍后重试。');
+  return data;
 }
-
-function eventList() {
-  if (!db.events.length) return '';
-  const sorted = [...db.events].sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-  return `<section class="panel"><div class="section-title"><h2>我创建的活动</h2></div>
-    <div class="mini-cards">${sorted.map(event => `<article class="resource">
-      <h3>${esc(event.title)}</h3>${tag(event.type)}
-      <p>${esc(event.date)} ${esc(event.time)} · ${esc(event.place)} · ${esc(event.capacity)} 人</p>
-      <p>${esc(event.description)}</p>
-    </article>`).join('')}</div></section>`;
+function message(id, text = '', error = false) {
+  const element = get(id);
+  element.textContent = text;
+  element.classList.toggle('error', error);
 }
-
-function newEvent() {
-  modal(`<h2>创建活动</h2>
-    <form id="event-form">
-      <label>活动名称<input name="title" required maxlength="60"></label>
-      <div class="form-grid">
-        <label>活动类型<select name="type"><option>共创沙龙</option><option>闭门私董会</option><option>其他活动</option></select></label>
-        <label>人数上限<input name="capacity" type="number" min="1" max="999" required></label>
-        <label>活动日期<input name="date" type="date" required></label>
-        <label>开始时间<input name="time" type="time" required></label>
-      </div>
-      <label>地点或线上会议说明<input name="place" required maxlength="100"></label>
-      <label>活动说明<textarea name="description" maxlength="500" placeholder="填写议题、议程或参会准备"></textarea></label>
-      <div class="actions">${closeBtn}<button class="btn primary">创建活动</button></div>
-    </form>`);
+function show(user) {
+  generation++;
+  get('loading').hidden = true;
+  get('auth').hidden = Boolean(user);
+  get('workspace').hidden = !user;
+  get('account').hidden = !user;
+  get('username').textContent = user?.name || '';
+  get('auth-form').reset();
+  get('entry-form').reset();
+  get('ask-form').reset();
+  get('thread').querySelectorAll('.bubble').forEach(node => node.remove());
+  get('welcome').hidden = false;
+  message('entry-message');
 }
-
-function saveProject(form, data) {
-  const item = db.projects.find(entry => entry.id === form.dataset.id);
-  const fields = { ...data, stage: Number(data.stage) };
-  if (item) {
-    Object.assign(item, fields);
-  } else {
-    db.projects.unshift({ ...fields, id: 'P' + Date.now() });
+function selectMode(next) {
+  mode = next;
+  const registering = next === 'register';
+  get('login-mode').setAttribute('aria-pressed', !registering);
+  get('register-mode').setAttribute('aria-pressed', registering);
+  get('auth-title').textContent = registering ? '注册账号' : '登录工作空间';
+  get('auth-submit').textContent = registering ? '注册并进入' : '登录';
+  get('password').autocomplete = registering ? 'new-password' : 'current-password';
+  get('confirm-field').hidden = !registering;
+  get('confirm-password').required = registering;
+  message('auth-message');
+}
+function failed(error, target) {
+  if (error.status === 401) { show(null); message('auth-message', '登录已过期，请重新登录。', true); }
+  else message(target, error.message, true);
+}
+function bubble(text, type = 'answer') {
+  const item = document.createElement('div');
+  item.className = `bubble ${type}`;
+  item.textContent = text;
+  get('welcome').hidden = true;
+  get('thread').append(item);
+  get('thread').scrollTop = get('thread').scrollHeight;
+  return item;
+}
+function source(item, parent) {
+  const card = document.createElement('div');
+  card.className = 'source';
+  const title = document.createElement('strong');
+  title.textContent = `【${item.type}】${item.title}`;
+  const detail = document.createElement('p');
+  detail.textContent = item.detail;
+  const visibility = document.createElement('small');
+  visibility.textContent = item.own ? (item.shared ? '我的资料 · 已共享' : '我的资料 · 仅自己可见') : '成员共享资料';
+  card.append(title, detail, visibility);
+  if (item.own && item.shared) {
+    const button = document.createElement('button');
+    button.textContent = '取消共享';
+    button.type = 'button';
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try { await api('unshare', { id: item.id }); visibility.textContent = '我的资料 · 仅自己可见'; button.remove(); }
+      catch (error) { failed(error, 'entry-message'); button.disabled = false; }
+    });
+    card.append(' ', button);
   }
-  log((item ? '更新项目：' : '创建项目：') + data.title);
-  $('#dialog').close();
-  render();
-  toast(item ? '项目进展已保存' : '项目已创建');
+  parent.append(card);
 }
 
-function saveEvent(data) {
-  db.events.push({ ...data, capacity: Number(data.capacity), id: 'E' + Date.now() });
-  log('创建活动：' + data.title);
-  $('#dialog').close();
-  render();
-  toast('活动已创建');
-}
-function book(){modal(`<h2>${db.bookings.includes('salon')?'我的参会意向':'记录参会意向'}</h2><p>苏州 · 首场生命科学共创沙龙</p><p class="sub">拟定 2026 年 11 月 26 日。这里仅做本地记录，未通知主办方。</p><div class="actions">${closeBtn}${btn(db.bookings.includes('salon')?'取消意向记录':'确认记录意向','toggleBooking',true)}</div>`)}
-function exportData(){let blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='生命科学共创会-本地数据.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('已导出本地数据备份')}
-document.addEventListener('click',e=>{let a=e.target.closest('[data-act]')?.dataset.act;if(a){if(routes.some(r=>r[0]===a)){location.hash=a;return}if(a.startsWith('project:'))return project(a.split(':')[1]);({newCard,newNeed,newProject:()=>project(),newEvent,runMatch,book,export:exportData,close:()=>$('#dialog').close(),toggleBooking:()=>{db.bookings=db.bookings.includes('salon')?[]:['salon'];log(db.bookings.length?'记录沙龙参会意向':'取消沙龙参会意向');$('#dialog').close();render();toast('本地意向记录已更新')}})[a]?.()}let f=e.target.closest('[data-filter]')?.dataset.filter;if(f){filter=f;render()}let id=e.target.closest('[data-detail]')?.dataset.detail;if(id){let c=db.cards.find(x=>x.id===id);modal(`<h2>${esc(c.title)}</h2><p>${tag(c.type+'卡')}${tag(c.field,'blue')}</p><p>${esc(c.desc)}</p><div class="rule"><p>卡片编号：${esc(c.id)}<br>成员标签：${esc(c.owner)}<br>关键词：${esc(c.tags)}<br>有效期：${esc(c.date)}<br>状态：${valid(c)?'示例已核验 · 可匹配':'待核验 / 更新'}</p></div><p class="sub">身份、机构与联系方式不在匿名档案披露。新卡片需在正式系统由独立运营人员复核。</p><div class="actions">${btn('关闭','close')}</div>`)}let intro=e.target.closest('[data-intro]');if(intro){let need=intro.dataset.need,cardId=intro.dataset.intro,key=need+'-'+cardId;if(db.projects.some(p=>p.key===key))return toast('已提交该组合的引荐申请');let c=db.cards.find(x=>x.id===cardId);db.projects.push({id:'P'+Date.now(),key,title:c.title+' · 引荐申请',field:c.field,stage:0,next:'运营审核并取得双方授权（未发送）',owner:'待指派'});log('创建本地引荐申请：'+c.title);toast('引荐申请已进入本地项目看板，未向任何人发送通知')}});
-document.addEventListener('input',e=>{if(e.target.id==='search'){query=e.target.value;let pos=e.target.selectionStart;$('#app').innerHTML=resources();$('#search').focus();$('#search').setSelectionRange(pos,pos)}});document.addEventListener('change',e=>{if(e.target.id==='field'){filter=e.target.value;render()}});
-document.addEventListener('submit',e=>{e.preventDefault();let f=e.target;if(!f.reportValidity())return;let data=Object.fromEntries(new FormData(f));if(f.id==='card-form'){db.cards.unshift({...data,id:'C'+Date.now(),owner:'我的匿名档案',auth:true,willing:true,verified:false});log('新增待核验卡片：'+data.title);$('#dialog').close();location.hash='resources';render();toast('卡片已入库，核验前不会参与匹配')}if(f.id==='need-form'){db.needs.push({...data,id:'N'+Date.now(),auth:true});log('发布需求：'+data.title);$('#dialog').close();location.hash='matching';render();toast('需求已保存，可以开始匹配')}if(f.id==='project-form')saveProject(f,data);if(f.id==='event-form')saveEvent(data);if(f.id==='calc'){let amount=+$('#amount').value,d=+$('#difficulty').value,z=+$('#ownership').value,w=+$('#payment').value,r=+$('#share').value/100;let p=100/1e6*(1+.2*(d-1))*z*amount*(.1+.9*w);$('#calculation').innerHTML=`<p class="sub" style="margin-top:24px">本笔项目贡献 · 试算</p><div class="result-number">${p.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div><p>本人份额贡献：<strong>${(p*r).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong> 单位</p><p class="sub">本次计算未入正式账本。需核验实收、首付上限、凭证去重及全体角色份额后才能结算。</p>`}});
-$('#export').onclick=exportData;window.addEventListener('hashchange',()=>{filter='全部';query='';render();window.scrollTo(0,0)});render();
+get('login-mode').onclick = () => selectMode('login');
+get('register-mode').onclick = () => selectMode('register');
+get('auth-form').onsubmit = async event => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const action = mode;
+  if (action === 'register' && data.password !== get('confirm-password').value) return message('auth-message', '两次密码不一致。', true);
+  const button = get('auth-submit');
+  message('auth-message');
+  button.disabled = true;
+  try { show(await api(action, data)); }
+  catch (error) { message('auth-message', error.message, true); }
+  finally { button.disabled = false; }
+};
+get('entry-form').onsubmit = async event => {
+  event.preventDefault();
+  const form = event.currentTarget, button = form.querySelector('button');
+  const fields = new FormData(form), data = Object.fromEntries(fields);
+  const version = generation;
+  button.disabled = true;
+  message('entry-message');
+  try {
+    await api('cards', { ...data, shared: fields.has('shared') });
+    if (version === generation) { form.reset(); message('entry-message', '已保存。你现在可以在右侧问答中查找这条资料。'); }
+  } catch (error) { if (version === generation) failed(error, 'entry-message'); }
+  finally { button.disabled = false; }
+};
+get('ask-form').onsubmit = async event => {
+  event.preventDefault();
+  const question = get('question').value.trim(), button = event.currentTarget.querySelector('button');
+  if (!question || button.disabled) return;
+  const version = generation;
+  get('question').value = '';
+  button.disabled = true;
+  bubble(question, 'user');
+  const reply = bubble('正在查找资料…');
+  try {
+    const result = await api('ask', { question });
+    if (version !== generation) return;
+    reply.textContent = result.text;
+    result.sources.forEach(item => source(item, reply));
+  } catch (error) {
+    if (version === generation) {
+      if (error.status === 401) failed(error, 'entry-message');
+      else reply.textContent = error.message;
+    }
+  } finally { button.disabled = false; }
+};
+get('welcome').addEventListener('click', event => {
+  const question = event.target.dataset.question;
+  if (question) { get('question').value = question; get('ask-form').requestSubmit(); }
+});
+get('logout').onclick = async () => {
+  const button = get('logout');
+  button.disabled = true;
+  try { await api('logout', {}); show(null); selectMode('login'); }
+  catch (error) { failed(error, 'entry-message'); }
+  finally { button.disabled = false; }
+};
+api('me').then(show).catch(error => {
+  show(null);
+  if (error.status !== 401) message('auth-message', '暂时无法连接账号服务。你可以稍后重试。', true);
+});

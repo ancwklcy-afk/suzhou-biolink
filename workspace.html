@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4f5ef"><title>生命科学共创会 · BioLink</title>
+  <link rel="stylesheet" href="style.css"><script src="app.js" defer></script>
+</head>
+<body>
+<header><div class="bar"><div class="brand"><span aria-hidden="true">✳</span>生命科学共创会</div><div id="account" hidden><span id="username"></span><button id="logout" class="link" type="button">退出</button></div></div></header>
+<main>
+  <p id="loading" role="status">正在连接工作空间…</p>
+  <section id="auth" class="auth" hidden>
+    <div class="intro"><span class="kicker">BIOLINK · SUZHOU</span><h1>让合作<br>从一个问题开始。</h1><p>提交你能提供的能力、手上的资源或正在寻找的需求，再通过提问找到线索。</p></div>
+    <div class="panel auth-panel">
+      <div class="tabs" aria-label="账号操作"><button id="login-mode" type="button" aria-pressed="true">登录</button><button id="register-mode" type="button" aria-pressed="false">注册</button></div>
+      <h2 id="auth-title">登录工作空间</h2>
+      <form id="auth-form">
+        <label>用户名<input name="name" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" placeholder="英文字母、数字或下划线"></label>
+        <label>密码<input id="password" name="password" type="password" required minlength="10" maxlength="128" autocomplete="current-password" placeholder="至少 10 个字符"></label>
+        <label id="confirm-field" hidden>确认密码<input id="confirm-password" type="password" autocomplete="new-password" maxlength="128"></label>
+        <p class="message" id="auth-message" role="status"></p><button class="primary full" id="auth-submit">登录</button>
+      </form>
+    </div>
+  </section>
+  <section id="workspace" hidden>
+    <div class="workspace-head"><span class="kicker">BIOLINK WORKSPACE</span><h1>提交资料，提问找答案</h1></div>
+    <div class="layout">
+      <section class="panel entry"><h2>提交资料</h2><p class="muted">选一个分类，简单说明你能提供什么，或正在寻找什么。</p>
+        <form id="entry-form">
+          <fieldset><legend>资料分类</legend><div class="choices"><label><input type="radio" name="type" value="能力" checked><span>能力</span></label><label><input type="radio" name="type" value="需求"><span>需求</span></label><label><input type="radio" name="type" value="资源"><span>资源</span></label></div></fieldset>
+          <label>标题<input name="title" maxlength="60" required placeholder="例如：抗体药物临床前评价"></label>
+          <label>说明<textarea name="detail" maxlength="1000" rows="4" required placeholder="写下方向、可交付内容或合作条件"></textarea></label>
+          <label class="check"><input name="shared" type="checkbox"><span>允许其他注册用户通过问答看到这条资料的标题和说明</span></label>
+          <p class="message" id="entry-message" role="status"></p><button class="primary full">提交资料</button>
+        </form>
+      </section>
+      <section class="panel qa"><h2>提问与回答</h2><p class="muted">可查询自己的资料，以及其他用户主动共享的资料。</p>
+        <div id="thread" role="log" aria-live="polite"><div id="welcome"><p>你想找什么？</p><div class="suggestions"><button type="button" data-question="汇总我的资料">汇总我的资料</button><button type="button" data-question="有哪些临床前能力？">有哪些临床前能力？</button><button type="button" data-question="有没有跨境 BD 资源？">有没有跨境 BD 资源？</button></div></div></div>
+        <form id="ask-form"><label class="sr-only" for="question">你的问题</label><input id="question" name="question" maxlength="300" required placeholder="输入问题，例如：有哪些医疗器械注册资源？"><button class="primary">提问 ↑</button></form>
+      </section>
+    </div>
+  </section>
+</main>
+</body></html>
