@@ -3,15 +3,28 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#f4f5ef"><title>生命科学共创会 · BioLink</title>
-  <link rel="stylesheet" href="style.css"><script src="app.js" defer></script>
+  <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="landing.css"><script src="app.js" defer></script>
 </head>
 <body>
 <header><div class="bar"><div class="brand"><span aria-hidden="true">✳</span>生命科学共创会</div><div id="account" hidden><span id="username"></span><button id="logout" class="link" type="button">退出</button></div></div></header>
 <main>
   <p id="loading" role="status">正在连接工作空间…</p>
   <section id="auth" class="auth" hidden>
-    <div class="intro"><span class="kicker">BIOLINK · SUZHOU</span><h1>让合作<br>从一个问题开始。</h1><p>提交你能提供的能力、手上的资源或正在寻找的需求，再通过提问找到线索。</p></div>
-    <div class="panel auth-panel">
+    <div class="landing-art" aria-hidden="true">
+      <div class="landing-image landing-image--hero"></div>
+      <div class="landing-image landing-image--second"></div>
+      <div class="landing-orbit"></div>
+      <div class="landing-wash"></div>
+    </div>
+    <div class="landing-grid">
+      <section class="landing-scene landing-scene--first" aria-labelledby="landing-title">
+        <div class="landing-copy">
+          <p class="landing-eyebrow">BIOLINK · SUZHOU</p>
+          <h1 id="landing-title">让生命科学合作<br>从一个问题开始。</h1>
+          <p class="landing-lede">把你的能力、需求和资源带进共创会，通过提问找到可以对接的人和资料。</p>
+        </div>
+      </section>
+      <div class="landing-form-slot"><div class="panel auth-panel" id="auth-panel">
       <div class="tabs" aria-label="账号操作"><button id="login-mode" type="button" aria-pressed="true">登录</button><button id="register-mode" type="button" aria-pressed="false">注册</button></div>
       <h2 id="auth-title">登录工作空间</h2>
       <form id="auth-form">
@@ -20,6 +33,19 @@
         <label id="confirm-field" hidden>确认密码<input id="confirm-password" type="password" autocomplete="new-password" maxlength="128"></label>
         <p class="message" id="auth-message" role="status"></p><button class="primary full" id="auth-submit">登录</button>
       </form>
+      </div></div>
+      <a class="landing-browse" href="#how-it-works">了解如何共创 <span aria-hidden="true">↓</span></a>
+      <section id="how-it-works" class="landing-scene landing-scene--second" aria-labelledby="landing-how-title">
+        <div class="landing-copy">
+          <p class="landing-eyebrow">从提交到对接</p>
+          <h2 id="landing-how-title">一个入口，<br>用问答找合作。</h2>
+          <dl class="landing-steps">
+            <div><dt>提交资料</dt><dd>选「能力、需求、资源」中的一类，写清你能提供什么，或想找什么。</dd></div>
+            <div><dt>提出问题</dt><dd>比如「有哪些临床前评价能力？」问答会返回自己的资料和成员主动共享的相关内容。</dd></div>
+          </dl>
+          <a class="landing-return" href="#auth">回到登录 <span aria-hidden="true">↑</span></a>
+        </div>
+      </section>
     </div>
   </section>
   <section id="workspace" hidden>
