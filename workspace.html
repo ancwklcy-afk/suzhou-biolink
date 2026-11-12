@@ -11,24 +11,31 @@
   <p id="loading" role="status">正在连接工作空间…</p>
   <section id="auth" class="auth" hidden>
     <div class="landing-art" aria-hidden="true">
-      <div class="landing-image landing-image--hero"></div>
-      <div class="landing-image landing-image--second"></div>
-      <div class="landing-orbit"></div>
-      <div class="landing-wash"></div>
+      <div class="landing-image"></div>
     </div>
     <div class="landing-grid">
       <section class="landing-scene landing-scene--first" aria-labelledby="landing-title">
         <div class="landing-copy">
-          <p class="landing-eyebrow">BIOLINK · SUZHOU</p>
           <h1 id="landing-title">让生命科学合作<br>从一个问题开始。</h1>
-          <p class="landing-lede">把你的能力、需求和资源带进共创会，通过提问找到可以对接的人和资料。</p>
+          <p class="landing-lede">提交能力、需求或资源，通过提问找到合作线索。</p>
         </div>
       </section>
       <div class="landing-form-slot"><div class="panel auth-panel" id="auth-panel">
       <div class="tabs" aria-label="账号操作"><button id="login-mode" type="button" aria-pressed="true">登录</button><button id="register-mode" type="button" aria-pressed="false">注册</button></div>
       <h2 id="auth-title">登录工作空间</h2>
       <form id="auth-form">
-        <label>用户名<input name="name" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" placeholder="英文字母、数字或下划线"></label>
+        <fieldset id="register-methods" hidden><legend class="sr-only">注册方式</legend><div class="register-methods">
+          <label><input type="radio" name="channel" value="email"><span>邮箱</span></label>
+          <label><input type="radio" name="channel" value="sms"><span>手机号</span></label>
+          <label id="legacy-method"><input type="radio" name="channel" value="username" checked><span>用户名</span></label>
+        </div></fieldset>
+        <label><span id="identity-label">账号</span><input id="identity" name="name" required maxlength="254" autocomplete="username" placeholder="用户名、邮箱或手机号"></label>
+        <div id="verification-field" hidden>
+          <label for="verification-code">验证码</label><div class="verification-row">
+            <input id="verification-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4,10}" maxlength="10" placeholder="输入收到的验证码"><button id="send-code" type="button">发送验证码</button>
+          </div>
+          <p class="message" id="verification-message" role="status"></p>
+        </div>
         <label>密码<input id="password" name="password" type="password" required minlength="10" maxlength="128" autocomplete="current-password" placeholder="至少 10 个字符"></label>
         <label id="confirm-field" hidden>确认密码<input id="confirm-password" type="password" autocomplete="new-password" maxlength="128"></label>
         <p class="message" id="auth-message" role="status"></p><button class="primary full" id="auth-submit">登录</button>
@@ -37,7 +44,6 @@
       <a class="landing-browse" href="#how-it-works">了解如何共创 <span aria-hidden="true">↓</span></a>
       <section id="how-it-works" class="landing-scene landing-scene--second" aria-labelledby="landing-how-title">
         <div class="landing-copy">
-          <p class="landing-eyebrow">从提交到对接</p>
           <h2 id="landing-how-title">一个入口，<br>用问答找合作。</h2>
           <dl class="landing-steps">
             <div><dt>提交资料</dt><dd>选「能力、需求、资源」中的一类，写清你能提供什么，或想找什么。</dd></div>

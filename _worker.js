@@ -58,31 +58,123 @@ async function body(request) {
   return parsed;
 }
 function clean(value) { return typeof value === 'string' ? value.trim() : ''; }
+const usernamePattern = /^[a-z0-9_]{3,32}$/;
+
+function registrationConfig(env) {
+  const configured = /^VA[a-f0-9]{32}$/i.test(env.TWILIO_VERIFY_SERVICE_SID || '') &&
+    /^SK[a-f0-9]{32}$/i.test(env.TWILIO_API_KEY_SID || '') && Boolean(env.TWILIO_API_KEY_SECRET);
+  const email = configured && env.VERIFY_EMAIL_ENABLED === '1';
+  const sms = configured && env.VERIFY_SMS_ENABLED === '1';
+  return { email, sms, username: !email && !sms };
+}
+function destination(value, channel) {
+  const input = clean(value);
+  if (channel === 'email') {
+    return input.length <= 254 && /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(input) ? input.toLowerCase() : '';
+  }
+  const number = input.replace(/[\s()-]/g, '');
+  if (/^1[3-9]\d{9}$/.test(number)) return `+86${number}`;
+  return /^\+[1-9]\d{7,14}$/.test(number) ? number : '';
+}
+function displayName(name) {
+  if (name.startsWith('email:')) {
+    const [local, domain] = name.slice(6).split('@');
+    return `${local[0]}***@${domain}`;
+  }
+  if (name.startsWith('sms:')) return `手机号 · ${name.slice(-4)}`;
+  return name;
+}
+async function verifyRequest(env, endpoint, fields) {
+  const service = env.TWILIO_VERIFY_SERVICE_SID;
+  const response = await fetch(`https://verify.twilio.com/v2/Services/${service}/${endpoint}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${btoa(`${env.TWILIO_API_KEY_SID}:${env.TWILIO_API_KEY_SECRET}`)}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams(fields),
+    signal: AbortSignal.timeout(8000),
+  });
+  return { ok: response.ok, status: response.status, result: await response.json().catch(() => ({})) };
+}
+async function rateCounts(db, limits, now) {
+  const keys = await Promise.all(limits.map(limit => digest(limit.key)));
+  const queries = limits.map((limit, i) => db.prepare(`INSERT INTO auth_limits VALUES (?, 1, ?)
+    ON CONFLICT(key) DO UPDATE SET count = CASE WHEN expires <= ? THEN 1 ELSE count + 1 END,
+    expires = CASE WHEN expires <= ? THEN excluded.expires ELSE expires END RETURNING count`).bind(keys[i], now + limit.seconds, now, now));
+  const results = await db.batch(queries);
+  return results.every((result, i) => result.results[0].count <= limits[i].max);
+}
 async function allowAuth(db, request, name, action, now) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-  const keys = await Promise.all([digest(`ip:${action}:${ip}`), digest(`name:${action}:${name}`)]);
-  const queries = keys.map(key => db.prepare(`INSERT INTO auth_limits VALUES (?, 1, ?)
-    ON CONFLICT(key) DO UPDATE SET count = CASE WHEN expires <= ? THEN 1 ELSE count + 1 END,
-    expires = CASE WHEN expires <= ? THEN excluded.expires ELSE expires END RETURNING count`).bind(key, now + 900, now, now));
-  const [ipCount, nameCount] = await db.batch(queries);
-  return ipCount.results[0].count <= (action === 'register' ? 8 : 30) && nameCount.results[0].count <= 12;
+  return rateCounts(db, [
+    { key: `ip:${action}:${ip}`, seconds: 900, max: action === 'register' ? 8 : 30 },
+    { key: `name:${action}:${name}`, seconds: 900, max: 12 },
+  ], now);
 }
-async function authenticate(db, request, data, action, now) {
-  const name = clean(data.name).toLowerCase();
+async function sendCode(db, env, request, data, now) {
+  const channel = data.channel;
+  if (!['email', 'sms'].includes(channel)) return json({ error: '请选择邮箱或手机号。' }, 400);
+  if (!registrationConfig(env)[channel]) return json({ error: '该验证码通道尚未开通。' }, 503);
+  const to = destination(data.name, channel);
+  if (!to) return json({ error: channel === 'email' ? '请输入有效邮箱地址。' : '请输入有效手机号。' }, 400);
+  if (await db.prepare('SELECT id FROM users WHERE name = ?').bind(`${channel}:${to}`).first()) {
+    return json({ error: '此账号已注册，请直接登录。' }, 409);
+  }
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const allowed = await rateCounts(db, [
+    { key: `otp:ip:${ip}`, seconds: 900, max: 6 },
+    { key: `otp:to:${channel}:${to}`, seconds: 900, max: 3 },
+    { key: `otp:resend:${channel}:${to}`, seconds: 60, max: 1 },
+  ], now);
+  if (!allowed || !await rateCounts(db, [{ key: `otp:daily:${channel}`, seconds: 86400, max: 100 }], now)) {
+    return json({ error: '验证码请求过于频繁，请稍后重试。' }, 429);
+  }
+  const sent = await verifyRequest(env, 'Verifications', { To: to, Channel: channel, Locale: 'zh' });
+  if (!sent.ok || sent.result.status !== 'pending') {
+    return json({ error: '发送服务未能受理验证码，请检查账号或稍后重试。' }, 502);
+  }
+  return json({ ok: true, retryAfter: 60 });
+}
+async function authenticate(db, env, request, data, action, now) {
+  const input = clean(data.name).toLowerCase();
+  const isRegistration = action === 'register';
+  const channel = isRegistration ? (data.channel ?? 'username') : (input.includes('@') ? 'email' : 'sms');
+  const config = registrationConfig(env);
+  if (isRegistration && (!['username', 'email', 'sms'].includes(channel) || !config[channel])) {
+    return json({ error: '请选择已开通的注册方式。' }, 400);
+  }
+  const to = channel === 'username' ? '' : destination(input, channel);
+  const contact = to ? `${channel}:${to}` : '';
+  const legacy = usernamePattern.test(input) ? input : '';
+  const name = isRegistration && channel === 'username' ? legacy : contact || (!isRegistration ? legacy : '');
   const password = typeof data.password === 'string' ? data.password : '';
-  if (!/^[a-z0-9_]{3,32}$/.test(name) || password.length < 10 || password.length > 128) {
-    return json({ error: '用户名需为 3–32 位英文字母、数字或下划线，密码需为 10–128 个字符。' }, 400);
+  if (!name || password.length < 10 || password.length > 128) {
+    return json({ error: '请检查账号格式，密码需为 10–128 个字符。' }, 400);
   }
   if (!await allowAuth(db, request, name, action, now)) return json({ error: '操作过于频繁，请在 15 分钟后重试。' }, 429);
   let user;
-  if (action === 'register') {
+  if (isRegistration) {
+    if (channel !== 'username') {
+      const code = clean(data.code);
+      if (!/^\d{4,10}$/.test(code)) return json({ error: '请输入收到的验证码。' }, 400);
+      const checked = await verifyRequest(env, 'VerificationCheck', { To: to, Code: code });
+      if (checked.status === 429) return json({ error: '验证次数过多，请稍后重新发送。' }, 429);
+      if (checked.status >= 500 || checked.status === 401 || checked.status === 403) {
+        return json({ error: '验证码服务暂不可用，请稍后重试。' }, 502);
+      }
+      if (!checked.ok || checked.result.status !== 'approved') {
+        return json({ error: '验证码不正确或已过期。' }, 400);
+      }
+    }
     const salt = random(16);
     user = { id: crypto.randomUUID(), name };
     const passwordDigest = await passwordHash(password, salt);
     const inserted = await db.prepare('INSERT INTO users VALUES (?, ?, ?, ?) ON CONFLICT(name) DO NOTHING').bind(user.id, name, salt, passwordDigest).run();
-    if (!inserted.meta.changes) return json({ error: '此用户名已被使用。' }, 409);
+    if (!inserted.meta.changes) return json({ error: '此账号已注册，请直接登录。' }, 409);
   } else {
-    user = await db.prepare('SELECT id, name, salt, password FROM users WHERE name = ?').bind(name).first();
+    // If a legacy username looks like a local phone number, its owner can still log in.
+    user = await db.prepare('SELECT id, name, salt, password FROM users WHERE name IN (?, ?) ORDER BY name = ? DESC LIMIT 1').bind(name, legacy || name, legacy || name).first();
     const attempt = await passwordHash(password, user?.salt || '0'.repeat(32));
     if (!equal(attempt, user?.password || '0'.repeat(64)) || !user) return json({ error: '用户名或密码有误。' }, 401);
   }
@@ -92,7 +184,7 @@ async function authenticate(db, request, data, action, now) {
     db.prepare('DELETE FROM auth_limits WHERE expires <= ?').bind(now),
     db.prepare('INSERT INTO sessions VALUES (?, ?, ?)').bind(await digest(secret), user.id, now + TTL),
   ]);
-  return json({ name: user.name }, 200, { 'Set-Cookie': cookie(secret, TTL) });
+  return json({ name: displayName(user.name) }, 200, { 'Set-Cookie': cookie(secret, TTL) });
 }
 
 function tokens(text) {
@@ -126,22 +218,25 @@ function answer(question, rows, user) {
   return { text: `找到 ${ranked.length} 条${category || '相关'}资料，先展示 ${sources.length} 条。请结合资料说明判断是否适合对接。`, sources };
 }
 
-async function api(request, db, path) {
+async function api(request, env, path) {
+  const db = env.DB;
   const now = Math.floor(Date.now() / 1000);
   const url = new URL(request.url);
   if (request.method === 'POST' && request.headers.get('Origin') !== url.origin) return json({ error: '请求来源无效。' }, 403);
+  if (path === '/api/auth-config' && request.method === 'GET') return json(registrationConfig(env));
   if (!initialized) {
     await db.batch(schema.map(sql => db.prepare(sql)));
     initialized = true;
   }
   if (request.method === 'POST' && ['/api/register', '/api/login'].includes(path)) {
-    return authenticate(db, request, await body(request), path.split('/').pop(), now);
+    return authenticate(db, env, request, await body(request), path.split('/').pop(), now);
   }
+  if (path === '/api/send-code' && request.method === 'POST') return sendCode(db, env, request, await body(request), now);
   const secret = token(request);
   const hashed = secret ? await digest(secret) : null;
   const user = hashed && await db.prepare('SELECT users.id, users.name FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires > ?').bind(hashed, now).first();
   if (!user) return json({ error: '请先登录。' }, 401);
-  if (path === '/api/me' && request.method === 'GET') return json({ name: user.name });
+  if (path === '/api/me' && request.method === 'GET') return json({ name: displayName(user.name) });
   if (request.method !== 'POST') return json({ error: '该操作不可用。' }, 405);
   if (path === '/api/logout') {
     await db.prepare('DELETE FROM sessions WHERE token = ?').bind(hashed).run();
@@ -178,7 +273,7 @@ export default {
     if (!path.startsWith('/api/')) return env.ASSETS.fetch(request);
     if (!env.DB) return json({ error: '资料服务暂不可用，请稍后重试。' }, 503);
     try {
-      return await api(request, env.DB, path);
+      return await api(request, env, path);
     } catch (error) {
       if (error instanceof SyntaxError || error.message === 'bad-body') return json({ error: '请求内容无效。' }, 400);
       return json({ error: '服务暂不可用，请稍后重试。' }, 500);

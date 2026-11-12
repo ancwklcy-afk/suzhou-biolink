@@ -1,6 +1,10 @@
 const get = id => document.getElementById(id);
 let mode = 'login';
 let generation = 0;
+let registration = { email: false, sms: false, username: false };
+let resendAt = 0;
+let resendTimer;
+let sending = false;
 
 async function api(path, payload) {
   const options = payload === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };
@@ -51,11 +55,7 @@ const landingMotion = (() => {
     previous = time;
     current += (target - current) * (1 - Math.exp(-elapsed / 105));
     if (Math.abs(target - current) < 0.002) current = target;
-    const blend = current * current * (3 - 2 * current);
-    art.style.setProperty('--blend', blend.toFixed(4));
-    art.style.setProperty('--hero-y', `${(-current * 10).toFixed(2)}%`);
-    art.style.setProperty('--next-y', `${((1 - current) * 8).toFixed(2)}%`);
-    art.style.setProperty('--orbit-y', `${(current * 6).toFixed(2)}vh`);
+    art.style.setProperty('--hero-y', `${(-current * 8).toFixed(2)}%`);
     if (current !== target) frame = requestAnimationFrame(draw);
     else previous = 0;
   }
@@ -78,6 +78,45 @@ const landingMotion = (() => {
   reduced.addEventListener('change', refresh);
   return { refresh };
 })();
+
+function selectedChannel() {
+  return get('auth-form').elements.channel.value;
+}
+function updateSendButton() {
+  const remaining = Math.max(0, Math.ceil((resendAt - Date.now()) / 1000));
+  const button = get('send-code');
+  button.disabled = sending || remaining > 0 || !registration[selectedChannel()];
+  button.textContent = sending ? '发送中…' : remaining ? `${remaining} 秒后重发` : '发送验证码';
+  if (!remaining) { clearInterval(resendTimer); resendTimer = undefined; }
+}
+function updateRegistrationFields({ reset = true } = {}) {
+  const registering = mode === 'register';
+  const channel = registering ? selectedChannel() : 'login';
+  const identity = get('identity');
+  const code = get('verification-code');
+  const method = {
+    login: { label: '账号', type: 'text', placeholder: '用户名、邮箱或手机号', max: 254 },
+    username: { label: '用户名', type: 'text', placeholder: '英文字母、数字或下划线', max: 32, pattern: '[A-Za-z0-9_]{3,32}' },
+    email: { label: '邮箱', type: 'email', placeholder: '输入你的邮箱地址', max: 254 },
+    sms: { label: '手机号', type: 'tel', placeholder: '输入手机号，国际号码请加区号', max: 24 },
+  }[channel];
+  get('identity-label').textContent = method.label;
+  identity.type = method.type;
+  identity.placeholder = method.placeholder;
+  identity.maxLength = method.max;
+  if (method.pattern) identity.pattern = method.pattern;
+  else identity.removeAttribute('pattern');
+  identity.autocomplete = channel === 'email' ? 'email' : channel === 'sms' ? 'tel' : 'username';
+  const needsCode = channel === 'email' || channel === 'sms';
+  get('register-methods').hidden = !registering;
+  get('verification-field').hidden = !needsCode;
+  code.required = needsCode;
+  code.disabled = !needsCode;
+  if (reset) { identity.value = ''; code.value = ''; }
+  message('verification-message', needsCode && !registration[channel] ? '此验证码通道尚未开通。' : '');
+  get('auth-submit').disabled = registering && !registration[channel];
+  updateSendButton();
+}
 function selectMode(next) {
   mode = next;
   const registering = next === 'register';
@@ -89,6 +128,11 @@ function selectMode(next) {
   get('confirm-field').hidden = !registering;
   get('confirm-password').required = registering;
   message('auth-message');
+  if (registering) {
+    get('legacy-method').hidden = !registration.username;
+    get('auth-form').elements.channel.value = registration.email ? 'email' : registration.sms ? 'sms' : registration.username ? 'username' : 'email';
+  }
+  updateRegistrationFields();
 }
 function failed(error, target) {
   if (error.status === 401) { show(null); message('auth-message', '登录已过期，请重新登录。', true); }
@@ -129,6 +173,30 @@ function source(item, parent) {
 
 get('login-mode').onclick = () => selectMode('login');
 get('register-mode').onclick = () => selectMode('register');
+get('register-methods').onchange = () => updateRegistrationFields();
+get('send-code').onclick = async () => {
+  const input = get('identity');
+  if (!input.reportValidity()) return;
+  const channel = selectedChannel();
+  const name = input.value;
+  sending = true;
+  updateSendButton();
+  message('verification-message');
+  try {
+    const result = await api('send-code', { name, channel });
+    resendAt = Date.now() + result.retryAfter * 1000;
+    resendTimer = setInterval(updateSendButton, 250);
+    if (mode === 'register' && selectedChannel() === channel && input.value === name) {
+      message('verification-message', channel === 'email' ? '已请求发送，请查看收件箱和垃圾邮件。' : '已请求发送，请留意短信。');
+      get('verification-code').focus();
+    }
+  } catch (error) {
+    if (mode === 'register' && selectedChannel() === channel) message('verification-message', error.message, true);
+  } finally {
+    sending = false;
+    updateSendButton();
+  }
+};
 get('auth-form').onsubmit = async event => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
@@ -139,7 +207,7 @@ get('auth-form').onsubmit = async event => {
   button.disabled = true;
   try { show(await api(action, data)); }
   catch (error) { message('auth-message', error.message, true); }
-  finally { button.disabled = false; }
+  finally { button.disabled = mode === 'register' && !registration[selectedChannel()]; }
 };
 get('entry-form').onsubmit = async event => {
   event.preventDefault();
@@ -186,6 +254,10 @@ get('logout').onclick = async () => {
   catch (error) { failed(error, 'entry-message'); }
   finally { button.disabled = false; }
 };
+api('auth-config').then(config => {
+  registration = config;
+  if (mode === 'register') selectMode('register');
+}).catch(() => {});
 api('me').then(show).catch(error => {
   show(null);
   if (error.status !== 401) message('auth-message', '暂时无法连接账号服务。你可以稍后重试。', true);
