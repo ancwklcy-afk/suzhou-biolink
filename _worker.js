@@ -65,8 +65,9 @@ function registrationConfig(env) {
     /^SK[a-f0-9]{32}$/i.test(env.TWILIO_API_KEY_SID || '') && Boolean(env.TWILIO_API_KEY_SECRET);
   const email = configured && env.VERIFY_EMAIL_ENABLED === '1';
   const sms = configured && env.VERIFY_SMS_ENABLED === '1';
-  return { email, sms, username: !email && !sms };
+  return { email, sms };
 }
+function contactChannel(value) { return value.includes('@') ? 'email' : 'sms'; }
 function destination(value, channel) {
   const input = clean(value);
   if (channel === 'email') {
@@ -113,11 +114,11 @@ async function allowAuth(db, request, name, action, now) {
   ], now);
 }
 async function sendCode(db, env, request, data, now) {
-  const channel = data.channel;
-  if (!['email', 'sms'].includes(channel)) return json({ error: '请选择邮箱或手机号。' }, 400);
+  const input = clean(data.name);
+  const channel = contactChannel(input);
+  const to = destination(input, channel);
+  if (!to) return json({ error: '请输入有效的邮箱地址或手机号。' }, 400);
   if (!registrationConfig(env)[channel]) return json({ error: '该验证码通道尚未开通。' }, 503);
-  const to = destination(data.name, channel);
-  if (!to) return json({ error: channel === 'email' ? '请输入有效邮箱地址。' : '请输入有效手机号。' }, 400);
   if (await db.prepare('SELECT id FROM users WHERE name = ?').bind(`${channel}:${to}`).first()) {
     return json({ error: '此账号已注册，请直接登录。' }, 409);
   }
@@ -139,33 +140,29 @@ async function sendCode(db, env, request, data, now) {
 async function authenticate(db, env, request, data, action, now) {
   const input = clean(data.name).toLowerCase();
   const isRegistration = action === 'register';
-  const channel = isRegistration ? (data.channel ?? 'username') : (input.includes('@') ? 'email' : 'sms');
-  const config = registrationConfig(env);
-  if (isRegistration && (!['username', 'email', 'sms'].includes(channel) || !config[channel])) {
-    return json({ error: '请选择已开通的注册方式。' }, 400);
-  }
-  const to = channel === 'username' ? '' : destination(input, channel);
+  const channel = contactChannel(input);
+  const to = destination(input, channel);
   const contact = to ? `${channel}:${to}` : '';
   const legacy = usernamePattern.test(input) ? input : '';
-  const name = isRegistration && channel === 'username' ? legacy : contact || (!isRegistration ? legacy : '');
+  const name = contact || (!isRegistration ? legacy : '');
   const password = typeof data.password === 'string' ? data.password : '';
+  if (isRegistration && !to) return json({ error: '注册需要有效的邮箱地址或手机号。' }, 400);
+  if (isRegistration && !registrationConfig(env)[channel]) return json({ error: '该验证码通道尚未开通。' }, 503);
   if (!name || password.length < 10 || password.length > 128) {
     return json({ error: '请检查账号格式，密码需为 10–128 个字符。' }, 400);
   }
   if (!await allowAuth(db, request, name, action, now)) return json({ error: '操作过于频繁，请在 15 分钟后重试。' }, 429);
   let user;
   if (isRegistration) {
-    if (channel !== 'username') {
-      const code = clean(data.code);
-      if (!/^\d{4,10}$/.test(code)) return json({ error: '请输入收到的验证码。' }, 400);
-      const checked = await verifyRequest(env, 'VerificationCheck', { To: to, Code: code });
-      if (checked.status === 429) return json({ error: '验证次数过多，请稍后重新发送。' }, 429);
-      if (checked.status >= 500 || checked.status === 401 || checked.status === 403) {
-        return json({ error: '验证码服务暂不可用，请稍后重试。' }, 502);
-      }
-      if (!checked.ok || checked.result.status !== 'approved') {
-        return json({ error: '验证码不正确或已过期。' }, 400);
-      }
+    const code = clean(data.code);
+    if (!/^\d{4,10}$/.test(code)) return json({ error: '请输入收到的验证码。' }, 400);
+    const checked = await verifyRequest(env, 'VerificationCheck', { To: to, Code: code });
+    if (checked.status === 429) return json({ error: '验证次数过多，请稍后重新发送。' }, 429);
+    if (checked.status >= 500 || checked.status === 401 || checked.status === 403) {
+      return json({ error: '验证码服务暂不可用，请稍后重试。' }, 502);
+    }
+    if (!checked.ok || checked.result.status !== 'approved') {
+      return json({ error: '验证码不正确或已过期。' }, 400);
     }
     const salt = random(16);
     user = { id: crypto.randomUUID(), name };
@@ -176,7 +173,7 @@ async function authenticate(db, env, request, data, action, now) {
     // If a legacy username looks like a local phone number, its owner can still log in.
     user = await db.prepare('SELECT id, name, salt, password FROM users WHERE name IN (?, ?) ORDER BY name = ? DESC LIMIT 1').bind(name, legacy || name, legacy || name).first();
     const attempt = await passwordHash(password, user?.salt || '0'.repeat(32));
-    if (!equal(attempt, user?.password || '0'.repeat(64)) || !user) return json({ error: '用户名或密码有误。' }, 401);
+    if (!equal(attempt, user?.password || '0'.repeat(64)) || !user) return json({ error: '账号或密码有误。' }, 401);
   }
   const secret = random(32);
   await db.batch([

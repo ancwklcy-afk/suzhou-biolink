@@ -1,10 +1,11 @@
 const get = id => document.getElementById(id);
 let mode = 'login';
 let generation = 0;
-let registration = { email: false, sms: false, username: false };
+let registration;
 let resendAt = 0;
 let resendTimer;
 let sending = false;
+let submitting = false;
 
 async function api(path, payload) {
   const options = payload === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };
@@ -37,43 +38,37 @@ function show(user) {
   message('entry-message');
 }
 
-function selectedChannel() {
-  return get('auth-form').elements.channel.value;
+function contactChannel(value = get('identity').value) {
+  return value.includes('@') ? 'email' : 'sms';
 }
 function updateSendButton() {
   const remaining = Math.max(0, Math.ceil((resendAt - Date.now()) / 1000));
   const button = get('send-code');
-  button.disabled = sending || remaining > 0 || !registration[selectedChannel()];
+  button.disabled = sending || submitting || remaining > 0 || !get('identity').value.trim() || !registration?.[contactChannel()];
   button.textContent = sending ? '发送中…' : remaining ? `${remaining} 秒后重发` : '发送验证码';
   if (!remaining) { clearInterval(resendTimer); resendTimer = undefined; }
 }
-function updateRegistrationFields({ reset = true } = {}) {
+function updateRegistrationAvailability() {
+  const value = get('identity').value.trim();
+  const channel = contactChannel(value);
+  const unavailable = !registration ? '暂时无法确认验证码服务。' :
+    !registration.email && !registration.sms ? '邮箱和短信验证码服务暂未开通。' :
+    value && !registration[channel] ? `${channel === 'email' ? '邮箱' : '短信'}验证码服务暂未开通。` : '';
+  message('verification-message', mode === 'register' ? unavailable : '');
+  get('auth-submit').disabled = submitting || (mode === 'register' && (!value || !registration?.[channel]));
+  updateSendButton();
+}
+function updateRegistrationFields() {
   const registering = mode === 'register';
-  const channel = registering ? selectedChannel() : 'login';
   const identity = get('identity');
   const code = get('verification-code');
-  const method = {
-    login: { label: '账号', type: 'text', placeholder: '用户名、邮箱或手机号', max: 254 },
-    username: { label: '用户名', type: 'text', placeholder: '英文字母、数字或下划线', max: 32, pattern: '[A-Za-z0-9_]{3,32}' },
-    email: { label: '邮箱', type: 'email', placeholder: '输入你的邮箱地址', max: 254 },
-    sms: { label: '手机号', type: 'tel', placeholder: '输入手机号，国际号码请加区号', max: 24 },
-  }[channel];
-  get('identity-label').textContent = method.label;
-  identity.type = method.type;
-  identity.placeholder = method.placeholder;
-  identity.maxLength = method.max;
-  if (method.pattern) identity.pattern = method.pattern;
-  else identity.removeAttribute('pattern');
-  identity.autocomplete = channel === 'email' ? 'email' : channel === 'sms' ? 'tel' : 'username';
-  const needsCode = channel === 'email' || channel === 'sms';
-  get('register-methods').hidden = !registering;
-  get('verification-field').hidden = !needsCode;
-  code.required = needsCode;
-  code.disabled = !needsCode;
-  if (reset) { identity.value = ''; code.value = ''; }
-  message('verification-message', needsCode && !registration[channel] ? '此验证码通道尚未开通。' : '');
-  get('auth-submit').disabled = registering && !registration[channel];
-  updateSendButton();
+  get('identity-label').textContent = registering ? '邮箱或手机号' : '账号';
+  identity.placeholder = registering ? '输入邮箱地址或手机号' : '用户名、邮箱或手机号';
+  get('verification-field').hidden = !registering;
+  code.required = registering;
+  code.disabled = !registering;
+  code.value = '';
+  updateRegistrationAvailability();
 }
 function selectMode(next) {
   mode = next;
@@ -86,10 +81,6 @@ function selectMode(next) {
   get('confirm-field').hidden = !registering;
   get('confirm-password').required = registering;
   message('auth-message');
-  if (registering) {
-    get('legacy-method').hidden = !registration.username;
-    get('auth-form').elements.channel.value = registration.email ? 'email' : registration.sms ? 'sms' : registration.username ? 'username' : 'email';
-  }
   updateRegistrationFields();
 }
 function failed(error, target) {
@@ -131,25 +122,28 @@ function source(item, parent) {
 
 get('login-mode').onclick = () => selectMode('login');
 get('register-mode').onclick = () => selectMode('register');
-get('register-methods').onchange = () => updateRegistrationFields();
+get('identity').oninput = () => {
+  if (mode === 'register') get('verification-code').value = '';
+  updateRegistrationAvailability();
+};
 get('send-code').onclick = async () => {
   const input = get('identity');
-  if (!input.reportValidity()) return;
-  const channel = selectedChannel();
-  const name = input.value;
+  const name = input.value.trim();
+  const channel = contactChannel(name);
+  if (mode !== 'register' || !name || !registration?.[channel] || !input.reportValidity()) return;
   sending = true;
   updateSendButton();
   message('verification-message');
   try {
-    const result = await api('send-code', { name, channel });
+    const result = await api('send-code', { name });
     resendAt = Date.now() + result.retryAfter * 1000;
     resendTimer = setInterval(updateSendButton, 250);
-    if (mode === 'register' && selectedChannel() === channel && input.value === name) {
+    if (mode === 'register' && input.value.trim() === name) {
       message('verification-message', channel === 'email' ? '已请求发送，请查看收件箱和垃圾邮件。' : '已请求发送，请留意短信。');
       get('verification-code').focus();
     }
   } catch (error) {
-    if (mode === 'register' && selectedChannel() === channel) message('verification-message', error.message, true);
+    if (mode === 'register' && input.value.trim() === name) message('verification-message', error.message, true);
   } finally {
     sending = false;
     updateSendButton();
@@ -157,15 +151,17 @@ get('send-code').onclick = async () => {
 };
 get('auth-form').onsubmit = async event => {
   event.preventDefault();
+  if (submitting || get('auth-submit').disabled) return;
   const data = Object.fromEntries(new FormData(event.currentTarget));
   const action = mode;
   if (action === 'register' && data.password !== get('confirm-password').value) return message('auth-message', '两次密码不一致。', true);
-  const button = get('auth-submit');
   message('auth-message');
-  button.disabled = true;
+  submitting = true;
+  get('auth-submit').disabled = true;
+  updateSendButton();
   try { show(await api(action, data)); }
   catch (error) { message('auth-message', error.message, true); }
-  finally { button.disabled = mode === 'register' && !registration[selectedChannel()]; }
+  finally { submitting = false; updateRegistrationAvailability(); }
 };
 get('entry-form').onsubmit = async event => {
   event.preventDefault();
@@ -214,7 +210,7 @@ get('logout').onclick = async () => {
 };
 api('auth-config').then(config => {
   registration = config;
-  if (mode === 'register') selectMode('register');
+  if (mode === 'register') updateRegistrationAvailability();
 }).catch(() => {});
 api('me').then(show).catch(error => {
   show(null);

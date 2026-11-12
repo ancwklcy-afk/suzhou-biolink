@@ -45,11 +45,6 @@
       <div class="tabs" aria-label="账号操作"><button id="login-mode" type="button" aria-pressed="true">登录</button><button id="register-mode" type="button" aria-pressed="false">注册</button></div>
       <h2 id="auth-title">登录工作空间</h2>
       <form id="auth-form">
-        <fieldset id="register-methods" hidden><legend class="sr-only">注册方式</legend><div class="register-methods">
-          <label><input type="radio" name="channel" value="email"><span>邮箱</span></label>
-          <label><input type="radio" name="channel" value="sms"><span>手机号</span></label>
-          <label id="legacy-method"><input type="radio" name="channel" value="username" checked><span>用户名</span></label>
-        </div></fieldset>
         <label><span id="identity-label">账号</span><input id="identity" name="name" required maxlength="254" autocomplete="username" placeholder="用户名、邮箱或手机号"></label>
         <div id="verification-field" hidden>
           <label for="verification-code">验证码</label><div class="verification-row">
