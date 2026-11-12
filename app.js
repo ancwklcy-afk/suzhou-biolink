@@ -28,7 +28,6 @@ function show(user) {
   get('account').hidden = !user;
   document.body.classList.toggle('is-landing', !user);
   if (wasLanding !== !user) window.scrollTo({ top: 0, behavior: 'instant' });
-  landingMotion.refresh();
   get('username').textContent = user?.name || '';
   get('auth-form').reset();
   get('entry-form').reset();
@@ -37,47 +36,6 @@ function show(user) {
   get('welcome').hidden = false;
   message('entry-message');
 }
-
-const landingMotion = (() => {
-  const landing = get('auth');
-  const art = landing.querySelector('.landing-art');
-  const second = get('how-it-works');
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  let current = 0;
-  let target = 0;
-  let frame = 0;
-  let previous = 0;
-
-  function draw(time) {
-    frame = 0;
-    if (landing.hidden || reduced.matches) return;
-    const elapsed = previous ? Math.min(time - previous, 50) : 16.7;
-    previous = time;
-    current += (target - current) * (1 - Math.exp(-elapsed / 105));
-    if (Math.abs(target - current) < 0.002) current = target;
-    art.style.setProperty('--hero-y', `${(-current * 8).toFixed(2)}%`);
-    if (current !== target) frame = requestAnimationFrame(draw);
-    else previous = 0;
-  }
-
-  function refresh() {
-    if (landing.hidden || reduced.matches) {
-      cancelAnimationFrame(frame);
-      frame = current = target = previous = 0;
-      art.removeAttribute('style');
-      return;
-    }
-    const distance = second.getBoundingClientRect().top;
-    const height = document.documentElement.clientHeight;
-    target = Math.max(0, Math.min(1, (height * 0.82 - distance) / (height * 0.72)));
-    if (!frame) frame = requestAnimationFrame(draw);
-  }
-
-  addEventListener('scroll', refresh, { passive: true });
-  addEventListener('resize', refresh);
-  reduced.addEventListener('change', refresh);
-  return { refresh };
-})();
 
 function selectedChannel() {
   return get('auth-form').elements.channel.value;
